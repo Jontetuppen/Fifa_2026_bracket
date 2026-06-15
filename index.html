@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VM 2026 · Bracket Predictor</title>
+<style>
+  :root{
+    --bg:#06231a;
+    --bg2:#0a3a28;
+    --panel:rgba(255,255,255,.05);
+    --panel-br:rgba(255,255,255,.12);
+    --gold:#f4c430;
+    --gold-soft:#ffe48a;
+    --green:#19c37d;
+    --red:#ff5d6c;
+    --txt:#eafaf2;
+    --muted:#8fb3a4;
+    --line:rgba(244,196,48,.35);
+    --pick:rgba(25,195,125,.20);
+    --pick-br:#19c37d;
+    --ai:#5cc8ff;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--txt);
+    background:
+      radial-gradient(1200px 600px at 20% -10%, rgba(244,196,48,.10), transparent 60%),
+      radial-gradient(1000px 500px at 100% 0%, rgba(92,200,255,.08), transparent 55%),
+      linear-gradient(160deg,var(--bg),var(--bg2) 70%,#05281c);
+    min-height:100vh;
+  }
+  a{color:var(--gold-soft)}
+  .wrap{max-width:1280px;margin:0 auto;padding:22px 18px 80px}
+
+  /* Header */
+  header.hero{
+    display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+    padding:18px 22px;border-radius:18px;
+    background:linear-gradient(120deg,rgba(244,196,48,.12),rgba(25,195,125,.08));
+    border:1px solid var(--panel-br);
+    box-shadow:0 18px 50px rgba(0,0,0,.35);
+  }
+  .trophy{font-size:46px;filter:drop-shadow(0 6px 14px rgba(244,196,48,.4))}
+  .hero h1{margin:0;font-size:30px;letter-spacing:.5px;line-height:1.05}
+  .hero h1 b{color:var(--gold)}
+  .hero p{margin:4px 0 0;color:var(--muted);font-size:14px}
+  .hosts{margin-left:auto;text-align:right;font-size:13px;color:var(--muted)}
+  .hosts .flags{font-size:24px;letter-spacing:2px}
+
+  /* Status / champion bar */
+  .statusbar{
+    display:flex;gap:14px;flex-wrap:wrap;align-items:stretch;margin:18px 0 10px;
+  }
+  .card{
+    background:var(--panel);border:1px solid var(--panel-br);border-radius:14px;padding:14px 16px;
+  }
+  .champ{flex:1;min-width:240px;display:flex;align-items:center;gap:14px}
+  .champ .lbl{font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+  .champ .name{font-size:24px;font-weight:700;color:var(--gold)}
+  .champ .name.empty{color:var(--muted);font-weight:500;font-size:18px}
+  .champ img{width:38px;height:auto;border-radius:4px;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+  .meter{min-width:230px;display:flex;flex-direction:column;justify-content:center;gap:6px}
+  .meter .row{display:flex;justify-content:space-between;font-size:13px}
+  .meter .bar{height:8px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden}
+  .meter .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ai),#9be4ff);transition:width .3s}
+  .meter small{color:var(--muted);font-size:11px}
+
+  /* Controls */
+  .controls{display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 18px}
+  button.btn{
+    font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+    border-radius:11px;padding:10px 16px;border:1px solid var(--panel-br);
+    background:var(--panel);color:var(--txt);transition:all .15s;
+    min-width:130px;flex:1 1 140px;touch-action:manipulation;
+  }
+  button.btn:hover{border-color:var(--gold);transform:translateY(-1px)}
+  button.btn.gold{background:linear-gradient(120deg,var(--gold),#e0a800);color:#3a2a00;border:none}
+  button.btn.ai{background:linear-gradient(120deg,#1d6fa5,#2f8fd0);color:#eaf7ff;border:none}
+  button.btn.ai.on{box-shadow:0 0 0 2px var(--ai) inset}
+
+  /* Groups */
+  details.groups{margin:0 0 22px;border-radius:14px;border:1px solid var(--panel-br);background:var(--panel);overflow:hidden}
+  details.groups>summary{cursor:pointer;padding:14px 18px;font-weight:600;list-style:none;display:flex;align-items:center;gap:10px}
+  details.groups>summary::-webkit-details-marker{display:none}
+  details.groups>summary .chev{margin-left:auto;color:var(--muted);font-size:12px}
+  .grid-groups{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:6px 18px 18px}
+  .grp{background:rgba(0,0,0,.18);border:1px solid var(--panel-br);border-radius:11px;padding:10px 12px}
+  .grp h4{margin:0 0 8px;font-size:13px;letter-spacing:1px;color:var(--gold-soft);text-transform:uppercase}
+  .grp .t{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px;border-top:1px dashed rgba(255,255,255,.07)}
+  .grp .t:first-of-type{border-top:none}
+  .grp .t img{width:22px;height:auto;border-radius:3px}
+  .grp .t .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .grp .t .rk{color:var(--muted);font-size:11px}
+  .pos{font-size:10px;font-weight:700;border-radius:5px;padding:2px 5px;min-width:20px;text-align:center}
+  .pos.adv{background:var(--pick);color:#bff6dd;border:1px solid var(--pick-br)}
+  .pos.t3{background:rgba(244,196,48,.18);color:var(--gold-soft);border:1px solid var(--line)}
+  .pos.out{background:rgba(255,93,108,.12);color:#ffc2c8;border:1px solid rgba(255,93,108,.3)}
+
+  /* Bracket */
+  .bracket-scroll{overflow:auto;border-radius:16px;border:1px solid var(--panel-br);
+    background:linear-gradient(180deg,rgba(0,0,0,.18),rgba(0,0,0,.05));padding:8px;
+    -webkit-overflow-scrolling:touch;
+  }
+  .bracket-inner{position:relative;display:flex;gap:54px;padding:14px 18px;min-width:max-content}
+  .round{display:flex;flex-direction:column;justify-content:space-around;position:relative;z-index:1}
+  .round .rhead{position:sticky;top:0;text-align:center;font-size:11px;letter-spacing:1.5px;
+    text-transform:uppercase;color:var(--gold-soft);margin-bottom:6px;font-weight:700}
+  .round-col{display:flex;flex-direction:column;justify-content:space-around;flex:1;gap:0}
+  .match{
+    width:192px;background:var(--panel);border:1px solid var(--panel-br);border-radius:11px;
+    margin:7px 0;overflow:hidden;position:relative;backdrop-filter:blur(2px);
+  }
+  .match .mno{position:absolute;top:-8px;left:8px;font-size:9px;color:var(--muted);
+    background:var(--bg2);padding:0 5px;border-radius:5px;border:1px solid var(--panel-br)}
+  .slot{display:flex;align-items:center;gap:8px;padding:10px 10px;cursor:pointer;font-size:13px;
+    transition:background .12s;position:relative;touch-action:manipulation;
+  }
+  .slot+.slot{border-top:1px solid rgba(255,255,255,.08)}
+  .slot:hover{background:rgba(255,255,255,.06)}
+  .slot.empty{cursor:default;color:var(--muted);font-style:italic}
+  .slot.empty:hover{background:none}
+  .slot img{width:24px;height:auto;border-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .slot .nm{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .slot .rk{font-size:10px;color:var(--muted);background:rgba(255,255,255,.06);
+    border-radius:5px;padding:1px 5px;min-width:22px;text-align:center}
+  .slot.sel{background:var(--pick)}
+  .slot.sel .nm{font-weight:700;color:#d6ffe9}
+  .slot.sel::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--pick-br)}
+  .slot .aidot{font-size:11px;opacity:.55}
+  .slot.aihi{box-shadow:0 0 0 1.5px var(--ai) inset}
+  .match.final{border-color:var(--gold);box-shadow:0 0 26px rgba(244,196,48,.25)}
+  .match.final .slot.sel{background:rgba(244,196,48,.22)}
+  .match.final .slot.sel::before{background:var(--gold)}
+
+  svg.connectors{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:visible}
+  svg.connectors path{fill:none;stroke:var(--line);stroke-width:2}
+
+  footer.note{margin-top:26px;font-size:12px;color:var(--muted);line-height:1.6}
+  footer.note b{color:var(--gold-soft)}
+
+  /* Modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:center;
+    justify-content:center;z-index:50;padding:20px}
+  .modal.show{display:flex}
+  .modal .box{background:#0b2c20;border:1px solid var(--panel-br);border-radius:16px;padding:18px;
+    max-width:min(440px,92vw);max-height:90vh;overflow:auto;text-align:center}
+  .modal canvas{width:100%;height:auto;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .modal .mbtns{display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap}
+
+  @media (max-width:760px){
+    .wrap{padding:18px 14px 80px}
+    .statusbar{gap:10px}
+    .champ{min-width:180px}
+    .meter{min-width:180px}
+    .grid-groups{grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;padding:6px 14px 18px}
+    .grp{padding:10px}
+    .match{width:170px}
+    .bracket-inner{gap:30px;padding:12px 14px}
+    .round .rhead{font-size:10px}
+    .slot{font-size:12px;padding:10px 9px}
+    .slot img{width:20px}
+  }
+  @media (max-width:560px){
+    .hero h1{font-size:23px}.trophy{font-size:36px}.hosts{margin-left:0;text-align:left}
+    header.hero{padding:14px 16px}
+    .statusbar{margin:14px 0 10px}
+    .controls{gap:8px}
+    button.btn{font-size:13px;padding:10px 12px;min-width:0;flex:1 1 120px}
+    details.groups>summary{padding:12px 14px}
+    .grp .t{font-size:12px}
+    .match{width:160px}
+    .slot{gap:6px}
+    .round .rhead{font-size:9px}
+
+    .bracket-scroll{overflow-x:hidden;overflow-y:auto;padding:6px 0;}
+    .bracket-inner{display:block;min-width:auto;gap:0;padding:0;}
+    .round{width:100%;margin-bottom:18px}
+    .round-col{gap:12px}
+    .match{width:100%;}
+    svg.connectors{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="trophy">🏆</div>
+    <div>
+      <h1><b>VM 2026</b></h1>
+      <p>Klicka fram en vinnare i varje match, hela vägen till finalen i MetLife Stadium.</p>
+    </div>
+    <div class="hosts">
+      <div class="flags">🇨🇦 🇺🇸 🇲🇽</div>
+      <div>48 lag · 12 grupper · 16 juni 2026</div>
+    </div>
+  </header>
+
+  <div class="statusbar">
+    <div class="card champ">
+      <div class="lbl-wrap">
+        <div class="lbl">Din världsmästare</div>
+        <div id="champName" class="name empty">Inte vald än</div>
+      </div>
+      <img id="champFlag" alt="" style="display:none">
+    </div>
+    <div class="card meter">
+      <div class="row"><span>🤖 Du matchar AI-tipset</span><span id="agreeTxt">0 / 0</span></div>
+      <div class="bar"><i id="agreeBar"></i></div>
+      <small id="aiChampTxt">AI:ns favorit räknas fram från FIFA-rankingen.</small>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn ai" id="btnAI">🤖 Auto-fyll AI-tipset</button>
+    <button class="btn" id="btnShowAI">Visa AI-tips i trädet</button>
+    <button class="btn" id="btnClear">Rensa</button>
+    <button class="btn gold" id="btnShare">📸 Dela bild</button>
+  </div>
+
+  <details class="groups">
+    <summary>📋 Grupper, FIFA-ranking &amp; vilka som går vidare<span class="chev">klicka för att visa</span></summary>
+    <div class="grid-groups" id="groupsGrid"></div>
+  </details>
+
+  <div class="bracket-scroll">
+    <div class="bracket-inner" id="bracket">
+      <svg class="connectors" id="connectors"></svg>
+    </div>
+  </div>
+
+  <footer class="note">
+    <b>Om datan:</b> Lottning (48 lag i 12 grupper) och slutspelsträdet (match 73-104) är den officiella strukturen för VM 2026 i Kanada, USA och Mexiko. FIFA-rankingen är från juni 2026.
+    Gruppspelet pågår just nu (slutspelet startar 28 juni), så slutspelslagen och AI-tipset räknas fram deterministiskt ur FIFA-rankingen: tvåa bäst rankad vinner gruppen, de 8 bäst rankade grupptreorna går vidare.
+    Källor: FIFA, ESPN, Wikipedia, NBC Sports. Detta är demo-innehåll, inte en officiell prognos.
+  </footer>
+</div>
+
+<div class="modal" id="modal">
+  <div class="box">
+    <canvas id="shareCanvas" width="1080" height="1350"></canvas>
+    <div class="mbtns">
+      <button class="btn gold" id="btnDownload">⬇️ Ladda ner bild</button>
+      <button class="btn" id="btnCloseModal">Stäng</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- DATA ---------------- */
+const TEAMS = {
+  MEX:{name:"Mexiko",iso:"mx",rank:14}, RSA:{name:"Sydafrika",iso:"za",rank:60}, KOR:{name:"Sydkorea",iso:"kr",rank:25}, CZE:{name:"Tjeckien",iso:"cz",rank:40},
+  CAN:{name:"Kanada",iso:"ca",rank:30}, BIH:{name:"Bosnien",iso:"ba",rank:64}, QAT:{name:"Qatar",iso:"qa",rank:56}, SUI:{name:"Schweiz",iso:"ch",rank:19},
+  BRA:{name:"Brasilien",iso:"br",rank:6}, MAR:{name:"Marocko",iso:"ma",rank:7}, HAI:{name:"Haiti",iso:"ht",rank:83}, SCO:{name:"Skottland",iso:"gb-sct",rank:42},
+  USA:{name:"USA",iso:"us",rank:17}, PAR:{name:"Paraguay",iso:"py",rank:41}, AUS:{name:"Australien",iso:"au",rank:27}, TUR:{name:"Turkiet",iso:"tr",rank:22},
+  GER:{name:"Tyskland",iso:"de",rank:10}, CUW:{name:"Curaçao",iso:"cw",rank:82}, CIV:{name:"Elfenbenskusten",iso:"ci",rank:33}, ECU:{name:"Ecuador",iso:"ec",rank:23},
+  NED:{name:"Nederländerna",iso:"nl",rank:8}, JPN:{name:"Japan",iso:"jp",rank:18}, SWE:{name:"Sverige",iso:"se",rank:38}, TUN:{name:"Tunisien",iso:"tn",rank:45},
+  BEL:{name:"Belgien",iso:"be",rank:9}, EGY:{name:"Egypten",iso:"eg",rank:29}, IRN:{name:"Iran",iso:"ir",rank:20}, NZL:{name:"Nya Zeeland",iso:"nz",rank:85},
+  ESP:{name:"Spanien",iso:"es",rank:2}, CPV:{name:"Kap Verde",iso:"cv",rank:67}, KSA:{name:"Saudiarabien",iso:"sa",rank:61}, URU:{name:"Uruguay",iso:"uy",rank:16},
+  FRA:{name:"Frankrike",iso:"fr",rank:3}, SEN:{name:"Senegal",iso:"sn",rank:15}, IRQ:{name:"Irak",iso:"iq",rank:57}, NOR:{name:"Norge",iso:"no",rank:31},
+  ARG:{name:"Argentina",iso:"ar",rank:1}, ALG:{name:"Algeriet",iso:"dz",rank:28}, AUT:{name:"Österrike",iso:"at",rank:24}, JOR:{name:"Jordanien",iso:"jo",rank:63},
+  POR:{name:"Portugal",iso:"pt",rank:5}, COD:{name:"DR Kongo",iso:"cd",rank:46}, UZB:{name:"Uzbekistan",iso:"uz",rank:50}, COL:{name:"Colombia",iso:"co",rank:13},
+  ENG:{name:"England",iso:"gb-eng",rank:4}, CRO:{name:"Kroatien",iso:"hr",rank:11}, GHA:{name:"Ghana",iso:"gh",rank:73}, PAN:{name:"Panama",iso:"pa",rank:34}
+};
+const GROUPS = {
+  A:["MEX","RSA","KOR","CZE"], B:["CAN","BIH","QAT","SUI"], C:["BRA","MAR","HAI","SCO"],
+  D:["USA","PAR","AUS","TUR"], E:["GER","CUW","CIV","ECU"], F:["NED","JPN","SWE","TUN"],
+  G:["BEL","EGY","IRN","NZL"], H:["ESP","CPV","KSA","URU"], I:["FRA","SEN","IRQ","NOR"],
+  J:["ARG","ALG","AUT","JOR"], K:["POR","COD","UZB","COL"], L:["ENG","CRO","GHA","PAN"]
+};
+// Officiell R32-struktur (match 73-88). W=gruppvinnare, R=tvåa, T=bästa grupptrea-platser.
+const R32 = [
+  {id:73,s:[["R","A"],["R","B"]]}, {id:74,s:[["W","E"],["T","T74"]]}, {id:75,s:[["W","F"],["R","C"]]}, {id:76,s:[["W","C"],["R","F"]]},
+  {id:77,s:[["W","I"],["T","T77"]]}, {id:78,s:[["R","E"],["R","I"]]}, {id:79,s:[["W","A"],["T","T79"]]}, {id:80,s:[["W","L"],["T","T80"]]},
+  {id:81,s:[["W","D"],["T","T81"]]}, {id:82,s:[["W","G"],["T","T82"]]}, {id:83,s:[["R","K"],["R","L"]]}, {id:84,s:[["W","H"],["R","J"]]},
+  {id:85,s:[["W","B"],["T","T85"]]}, {id:86,s:[["W","J"],["R","H"]]}, {id:87,s:[["W","K"],["T","T87"]]}, {id:88,s:[["R","D"],["R","G"]]}
+];
+const T_SLOTS = { // behöriga grupper per trea-plats (officiell tabell)
+  T74:["A","B","C","D","F"], T77:["C","D","F","G","H"], T79:["C","E","F","H","I"], T80:["E","H","I","J","K"],
+  T81:["B","E","F","I","J"], T82:["A","E","H","I","J"], T85:["E","F","G","I","J"], T87:["D","E","I","J","L"]
+};
+const T_ORDER = ["T74","T77","T79","T80","T81","T82","T85","T87"];
+const R16  = [{id:89,f:[74,77]},{id:90,f:[73,75]},{id:91,f:[76,78]},{id:92,f:[79,80]},{id:93,f:[83,84]},{id:94,f:[81,82]},{id:95,f:[86,88]},{id:96,f:[85,87]}];
+const QF   = [{id:97,f:[89,90]},{id:98,f:[93,94]},{id:99,f:[91,92]},{id:100,f:[95,96]}];
+const SF   = [{id:101,f:[97,98]},{id:102,f:[99,100]}];
+const FIN  = [{id:104,f:[101,102]}];
+const ROUNDS = [
+  {key:"r32",label:"Sextondelsfinal",matches:R32},
+  {key:"r16",label:"Åttondelsfinal",matches:R16},
+  {key:"qf", label:"Kvartsfinal",matches:QF},
+  {key:"sf", label:"Semifinal",matches:SF},
+  {key:"fin",label:"Final",matches:FIN}
+];
+
+/* ------------- HÄRLED GRUPPSPEL UR RANKINGEN ------------- */
+const standings = {}; // group -> {w,r,t,order:[...]}
+for(const g in GROUPS){
+  const ord=[...GROUPS[g]].sort((a,b)=>TEAMS[a].rank-TEAMS[b].rank);
+  standings[g]={order:ord,w:ord[0],r:ord[1],t:ord[2]};
+}
+// bästa 8 treorna
+const thirds = Object.keys(GROUPS).map(g=>({g,code:standings[g].t,rank:TEAMS[standings[g].t].rank}));
+thirds.sort((a,b)=>a.rank-b.rank);
+const qualifiedThirds = thirds.slice(0,8);          // {g,code}
+const qualifiedThirdGroups = new Set(qualifiedThirds.map(t=>t.g));
+
+// matcha kvalade treor mot trea-platser (Kuhn's bipartite matching, deterministiskt)
+function matchThirds(){
+  const groupsByRank=[...qualifiedThirds].map(t=>t.g); // redan rank-sorterade
+  const slotAssign={}; // slot -> group
+  const groupTaken={};
+  function tryAssign(group,visited){
+    for(const slot of T_ORDER){
+      if(!T_SLOTS[slot].includes(group)) continue;
+      if(visited.has(slot)) continue;
+      visited.add(slot);
+      if(!slotAssign[slot] || tryAssign(slotAssign[slot],visited)){
+        slotAssign[slot]=group; return true;
+      }
+    }
+    return false;
+  }
+  for(const g of groupsByRank){ tryAssign(g,new Set()); }
+  // slot -> team code
+  const out={};
+  for(const slot of T_ORDER){ const grp=slotAssign[slot]; out[slot]= grp?standings[grp].t:null; }
+  return out;
+}
+const thirdSlotTeam = matchThirds();
+
+// Lös R32-slot till lagkod
+function slotTeam(spec){
+  const [kind,key]=spec;
+  if(kind==="W") return standings[key].w;
+  if(kind==="R") return standings[key].r;
+  if(kind==="T") return thirdSlotTeam[key];
+  return null;
+}
+const r32Teams={}; // matchId -> [codeA,codeB]
+R32.forEach(m=>{ r32Teams[m.id]=[slotTeam(m.s[0]),slotTeam(m.s[1])]; });
+
+// feeder-map för senare ronder
+const feeders={}; [...R16,...QF,...SF,...FIN].forEach(m=>feeders[m.id]=m.f);
+const allMatchIds=[...R32,...R16,...QF,...SF,...FIN].map(m=>m.id);
+const laterIds=[...R16,...QF,...SF,...FIN].map(m=>m.id);
+
+/* ------------- STATE ------------- */
+let picks={};         // matchId -> winning code
+let showAI=false;
+
+function teamsOf(id){
+  if(r32Teams[id]) return r32Teams[id];
+  const f=feeders[id];
+  return [ picks[f[0]]||null, picks[f[1]]||null ];
+}
+// AI: lägre rank vinner alltid
+const aiMemo={};
+function aiWin(id){
+  if(aiMemo[id]) return aiMemo[id];
+  let a,b;
+  if(r32Teams[id]){ [a,b]=r32Teams[id]; }
+  else { const f=feeders[id]; a=aiWin(f[0]); b=aiWin(f[1]); }
+  const w = TEAMS[a].rank<=TEAMS[b].rank ? a : b;
+  return aiMemo[id]=w;
+}
+
+function cascade(){
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(const id of laterIds){
+      if(picks[id]!==undefined){
+        const t=teamsOf(id);
+        if(!t.includes(picks[id])){ delete picks[id]; changed=true; }
+      }
+    }
+  }
+}
+function setPick(id,code){ picks[id]=code; cascade(); render(); }
+
+/* ------------- RENDER GROUPS ------------- */
+function flag(code,cls){ const t=TEAMS[code]; return `<img class="${cls||''}" src="https://flagcdn.com/w40/${t.iso}.png" alt="" onerror="this.style.visibility='hidden'">`; }
+function renderGroups(){
+  const grid=document.getElementById("groupsGrid");
+  grid.innerHTML=Object.keys(GROUPS).map(g=>{
+    const st=standings[g];
+    const rows=st.order.map((code,i)=>{
+      let badge,cls,lab;
+      if(i<2){cls="adv";lab=i===0?"1:a":"2:a";}
+      else if(i===2){ if(qualifiedThirdGroups.has(g)){cls="t3";lab="3:a ✓";} else {cls="out";lab="3:a";} }
+      else {cls="out";lab="4:a";}
+      return `<div class="t">${flag(code)}<span class="nm">${TEAMS[code].name}</span><span class="rk">#${TEAMS[code].rank}</span><span class="pos ${cls}">${lab}</span></div>`;
+    }).join("");
+    return `<div class="grp"><h4>Grupp ${g}</h4>${rows}</div>`;
+  }).join("");
+}
+
+/* ------------- RENDER BRACKET ------------- */
+function buildBracket(){
+  const root=document.getElementById("bracket");
+  ROUNDS.forEach(r=>{
+    const col=document.createElement("div");
+    col.className="round";
+    const head=document.createElement("div");
+    head.className="rhead"; head.textContent=r.label;
+    const body=document.createElement("div");
+    body.className="round-col";
+    r.matches.forEach(m=>{
+      const el=document.createElement("div");
+      el.className="match"+(r.key==="fin"?" final":"");
+      el.id="m-"+m.id;
+      el.innerHTML=`<span class="mno">M${m.id}</span>
+        <div class="slot" data-mid="${m.id}" data-side="0"></div>
+        <div class="slot" data-mid="${m.id}" data-side="1"></div>`;
+      body.appendChild(el);
+    });
+    col.appendChild(head); col.appendChild(body);
+    root.appendChild(col);
+  });
+  root.addEventListener("click",e=>{
+    const slot=e.target.closest(".slot"); if(!slot||slot.classList.contains("empty"))return;
+    const id=+slot.dataset.mid, side=+slot.dataset.side;
+    const code=teamsOf(id)[side]; if(code) setPick(id,code);
+  });
+}
+
+function slotHTML(id,side){
+  const code=teamsOf(id)[side];
+  const slot=document.querySelector(`#m-${id} .slot[data-side="${side}"]`);
+  if(!code){
+    let lbl="Att avgöra";
+    if(feeders[id]) lbl="Vinnare M"+feeders[id][side];
+    slot.className="slot empty"; slot.innerHTML=`<span class="nm">${lbl}</span>`;
+    return;
+  }
+  const t=TEAMS[code];
+  const isSel=picks[id]===code;
+  const isAI=aiWin(id)===code;
+  let cls="slot"; if(isSel)cls+=" sel"; if(showAI&&isAI)cls+=" aihi";
+  slot.className=cls;
+  slot.innerHTML=`${flag(code)}<span class="nm">${t.name}</span>${isAI?'<span class="aidot" title="AI-tips">🤖</span>':''}<span class="rk">#${t.rank}</span>`;
+}
+
+function render(){
+  allMatchIds.forEach(id=>{ slotHTML(id,0); slotHTML(id,1); });
+  // champion
+  const champ=picks[104];
+  const cn=document.getElementById("champName"), cf=document.getElementById("champFlag");
+  if(champ){ cn.textContent=TEAMS[champ].name; cn.className="name"; cf.src=`https://flagcdn.com/w80/${TEAMS[champ].iso}.png`; cf.style.display="block"; }
+  else { cn.textContent="Inte vald än"; cn.className="name empty"; cf.style.display="none"; }
+  // agreement
+  let made=0,agree=0;
+  allMatchIds.forEach(id=>{ if(picks[id]!==undefined){ made++; if(picks[id]===aiWin(id))agree++; } });
+  document.getElementById("agreeTxt").textContent=`${agree} / ${made}`;
+  document.getElementById("agreeBar").style.width=(made?(agree/made*100):0)+"%";
+  document.getElementById("aiChampTxt").textContent=`AI:ns världsmästare: ${TEAMS[aiWin(104)].name} (#${TEAMS[aiWin(104)].rank})`;
+  requestAnimationFrame(drawConnectors);
+}
+
+/* ------------- CONNECTORS ------------- */
+function drawConnectors(){
+  const svg=document.getElementById("connectors");
+  const inner=document.getElementById("bracket");
+  const ir=inner.getBoundingClientRect();
+  const W=inner.scrollWidth,H=inner.scrollHeight;
+  svg.setAttribute("width",W); svg.setAttribute("height",H);
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`);
+  let paths="";
+  function box(id){ const el=document.getElementById("m-"+id); const r=el.getBoundingClientRect();
+    return {l:r.left-ir.left, r:r.right-ir.left, y:r.top-ir.top+r.height/2}; }
+  [...R16,...QF,...SF,...FIN].forEach(m=>{
+    const tgt=box(m.id);
+    m.f.forEach(fid=>{
+      const src=box(fid);
+      const midX=(src.r+tgt.l)/2;
+      paths+=`<path d="M ${src.r} ${src.y} H ${midX} V ${tgt.y} H ${tgt.l}"/>`;
+    });
+  });
+  svg.innerHTML=paths;
+}
+
+/* ------------- CONTROLS ------------- */
+document.getElementById("btnAI").onclick=()=>{ picks={}; allMatchIds.forEach(id=>picks[id]=aiWin(id)); render(); };
+document.getElementById("btnClear").onclick=()=>{ picks={}; render(); };
+document.getElementById("btnShowAI").onclick=e=>{ showAI=!showAI; e.target.classList.toggle("on",showAI); render(); };
+window.addEventListener("resize",()=>requestAnimationFrame(drawConnectors));
+
+/* ------------- SHARE IMAGE ------------- */
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
+function drawShare(){
+  const c=document.getElementById("shareCanvas"), x=c.getContext("2d"), W=1080,H=1350;
+  // bakgrund
+  const g=x.createLinearGradient(0,0,W,H); g.addColorStop(0,"#0a3a28");g.addColorStop(.6,"#06231a");g.addColorStop(1,"#04251a");
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.fillStyle="rgba(244,196,48,.10)"; x.beginPath();x.arc(170,120,260,0,7);x.fill();
+  x.fillStyle="rgba(92,200,255,.07)"; x.beginPath();x.arc(960,40,230,0,7);x.fill();
+  const cx=W/2;
+  x.textAlign="center";
+  x.fillStyle="#f4c430"; x.font="700 30px -apple-system,Arial"; x.fillText("VM 2026 · BRACKET PREDICTOR",cx,80);
+  x.font="64px Arial"; x.fillText("🏆",cx,165);
+  x.fillStyle="#8fb3a4"; x.font="600 22px Arial"; x.fillText("MIN VÄRLDSMÄSTARE",cx,225);
+  const champ=picks[104];
+  x.fillStyle="#ffe48a"; x.font="800 70px -apple-system,Arial";
+  x.fillText(champ?TEAMS[champ].name.toUpperCase():"—",cx,300);
+  if(champ){ x.fillStyle="#8fb3a4";x.font="500 24px Arial";x.fillText("FIFA-ranking #"+TEAMS[champ].rank,cx,338); }
+
+  // mini-träd: finalister + semifinalister
+  function nm(id){ return picks[id]?TEAMS[picks[id]].name:"—"; }
+  function panel(label,id,yy){
+    rr(x,140,yy,800,66,14); x.fillStyle="rgba(255,255,255,.05)";x.fill();
+    x.strokeStyle="rgba(255,255,255,.12)";x.lineWidth=1.5;x.stroke();
+    x.textAlign="left";x.fillStyle="#8fb3a4";x.font="600 17px Arial";x.fillText(label,168,yy+27);
+    x.fillStyle="#eafaf2";x.font="700 30px -apple-system,Arial";x.fillText(nm(id),168,yy+55);
+    x.textAlign="center";
+  }
+  let yy=400;
+  x.fillStyle="#f4c430";x.font="700 20px Arial";x.textAlign="left";x.fillText("VÄGEN TILL TITELN",168,yy);x.textAlign="center";
+  yy+=18;
+  panel("FINAL",104,yy); yy+=82;
+  panel("SEMIFINAL",101,yy); yy+=82;
+  panel("SEMIFINAL",102,yy); yy+=82;
+
+  // AI-jämförelse
+  let made=0,agree=0; allMatchIds.forEach(id=>{ if(picks[id]!==undefined){made++; if(picks[id]===aiWin(id))agree++;} });
+  yy+=18;
+  rr(x,140,yy,800,150,16); x.fillStyle="rgba(92,200,255,.10)";x.fill();
+  x.strokeStyle="rgba(92,200,255,.4)";x.stroke();
+  x.fillStyle="#5cc8ff";x.font="700 22px Arial";x.fillText("🤖 DU vs AI-TIPSET",cx,yy+44);
+  x.fillStyle="#eafaf2";x.font="800 56px -apple-system,Arial";x.fillText(`${agree} / ${made}`,cx,yy+105);
+  x.fillStyle="#8fb3a4";x.font="500 20px Arial";x.fillText(`matcher matchar · AI tippar ${TEAMS[aiWin(104)].name}`,cx,yy+138);
+
+  x.fillStyle="#6f9587";x.font="500 20px Arial";
+  x.fillText("Kanada · USA · Mexiko - Jonte",cx,H-46);
+}
+document.getElementById("btnShare").onclick=()=>{
+  if(!picks[104]){ alert("Klicka fram en världsmästare i finalen först! 🏆"); return; }
+  drawShare(); document.getElementById("modal").classList.add("show");
+};
+document.getElementById("btnCloseModal").onclick=()=>document.getElementById("modal").classList.remove("show");
+document.getElementById("modal").onclick=e=>{ if(e.target.id==="modal")e.target.classList.remove("show"); };
+document.getElementById("btnDownload").onclick=()=>{
+  const a=document.createElement("a"); a.download="vm-2026-min-bracket.png";
+  a.href=document.getElementById("shareCanvas").toDataURL("image/png"); a.click();
+};
+
+/* ------------- INIT ------------- */
+renderGroups();
+buildBracket();
+render();
+window.addEventListener("load",()=>requestAnimationFrame(drawConnectors));
+</script>
+</body>
+</html>
